@@ -235,7 +235,7 @@ export class JsonRpcHandler {
         args,
       });
 
-      this.sendResponse(id, { transactionResult: result });
+      this.sendResponse(id, result);
 
       service.close();
     } catch (err) {
@@ -297,7 +297,7 @@ export class JsonRpcHandler {
         args,
       });
 
-      this.sendResponse(id, { transactionResult: result });
+      this.sendResponse(id, result);
 
       service.close();
     } catch (err) {
@@ -485,7 +485,7 @@ export class JsonRpcHandler {
         },
       };
 
-      this.sendResponse(id, { subscriptionId });
+      this.sendResponse(id, subscriptionId);
     } catch (err) {
       console.error("Subscription error:", err);
       this.sendError(id, -32000, "Subscription failed", err);
@@ -582,7 +582,7 @@ export class JsonRpcHandler {
         },
       };
 
-      this.sendResponse(id, { subscriptionId });
+      this.sendResponse(id, subscriptionId);
     } catch (err) {
       console.error("Block subscription error:", err);
       this.sendError(id, -32000, "Block subscription failed", err);
@@ -613,7 +613,7 @@ export class JsonRpcHandler {
       try {
         this.subscriptions[subscriptionId].closeListener();
         delete this.subscriptions[subscriptionId];
-        this.sendResponse(id, { success: true });
+        this.sendResponse(id, true);
       } catch (err) {
         console.error("Unsubscribe error:", err);
         this.sendError(id, -32000, "Failed to unsubscribe", err);
