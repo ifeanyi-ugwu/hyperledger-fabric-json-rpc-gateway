@@ -33,7 +33,7 @@ export class FabricService {
 
   close(): void {
     this.gateway.close();
-    this.client.close();
+    //this.client.close(); //client is cached and auto cleaned up in the cache
   }
 
   getNetwork(channelName: string): Network {
