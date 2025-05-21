@@ -104,7 +104,7 @@ Subscribes to events from the Fabric network.
 
 **Returns:**
 
-- `{ subscriptionId: string }` A unique ID for the subscription.
+- `string` A unique ID for the subscription.
 
 **Notifications (`fabric_subscription`):**
 
@@ -154,7 +154,7 @@ Unsubscribes from an active event stream.
 
 **Returns:**
 
-- `{ success: true }`
+- `boolean` `true` if the subscription was successfully canceled, `false` otherwise.
 
 ### Signature Request (`signDigest` request)
 
