@@ -126,9 +126,9 @@ export class JsonRpcHandler {
     });
   }
 
-  createSigner(label: string): Signer {
+  createSigner(certificate: string): Signer {
     return async (digest: Uint8Array): Promise<Uint8Array> => {
-      const signature = await this.requestSignature(digest, label);
+      const signature = await this.requestSignature(digest, certificate);
       if (!signature) {
         throw new Error("Signature not received");
       }
@@ -141,7 +141,7 @@ export class JsonRpcHandler {
    */
   private async requestSignature(
     digest: Uint8Array,
-    label: string
+    certificate: string
   ): Promise<Uint8Array | null> {
     return new Promise((resolve) => {
       const requestId = generateUniqueId();
@@ -172,7 +172,7 @@ export class JsonRpcHandler {
           method: "signDigest",
           params: {
             digest: Buffer.from(digest).toString("base64"),
-            label,
+            certificate,
           },
           id: requestId,
         })
@@ -194,7 +194,6 @@ export class JsonRpcHandler {
       !this.validateRequiredParams(id, [
         identity?.certificate,
         identity?.mspId,
-        identity?.label,
         channel,
         chaincode,
         fn,
@@ -210,7 +209,7 @@ export class JsonRpcHandler {
       credentials: Buffer.from(identity.certificate),
     };
 
-    const signer = this.createSigner(identity.label);
+    const signer = this.createSigner(identity.certificate);
 
     try {
       const service = await FabricService.createForUser(
@@ -257,7 +256,6 @@ export class JsonRpcHandler {
       !this.validateRequiredParams(id, [
         identity?.certificate,
         identity?.mspId,
-        identity?.label,
         channel,
         chaincode,
         fn,
@@ -273,7 +271,7 @@ export class JsonRpcHandler {
       credentials: Buffer.from(identity.certificate),
     };
 
-    const signer = this.createSigner(identity.label);
+    const signer = this.createSigner(identity.certificate);
 
     try {
       const service = await FabricService.createForUser(
@@ -317,7 +315,6 @@ export class JsonRpcHandler {
       !this.validateRequiredParams(id, [
         identity?.certificate,
         identity?.mspId,
-        identity?.label,
         channel,
         chaincode,
         fn,
@@ -333,7 +330,7 @@ export class JsonRpcHandler {
       credentials: Buffer.from(identity.certificate),
     };
 
-    const signer = this.createSigner(identity.label);
+    const signer = this.createSigner(identity.certificate);
 
     try {
       const service = await FabricService.createForUser(
@@ -405,7 +402,6 @@ export class JsonRpcHandler {
       !this.validateRequiredParams(id, [
         identity?.certificate,
         identity?.mspId,
-        identity?.label,
         channel,
         chaincode,
         name,
@@ -420,7 +416,7 @@ export class JsonRpcHandler {
       credentials: Buffer.from(identity.certificate),
     };
 
-    const signer = this.createSigner(identity.label);
+    const signer = this.createSigner(identity.certificate);
 
     try {
       const service = await FabricService.createForUser(
@@ -508,7 +504,6 @@ export class JsonRpcHandler {
       !this.validateRequiredParams(id, [
         identity?.certificate,
         identity?.mspId,
-        identity?.label,
         channel,
         name,
         endpoint,
@@ -522,7 +517,7 @@ export class JsonRpcHandler {
       credentials: Buffer.from(identity.certificate),
     };
 
-    const signer = this.createSigner(identity.label);
+    const signer = this.createSigner(identity.certificate);
 
     try {
       const service = await FabricService.createForUser(
