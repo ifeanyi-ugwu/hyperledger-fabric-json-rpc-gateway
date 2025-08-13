@@ -4,6 +4,7 @@ import { FabricService } from "./fabric.service";
 
 interface EventSubscription {
   closeListener: () => void;
+  service: FabricService; // Keep reference for cleanup
 }
 
 export class JsonRpcHandler {
@@ -119,6 +120,7 @@ export class JsonRpcHandler {
     Object.keys(this.subscriptions).forEach((subId) => {
       try {
         this.subscriptions[subId].closeListener();
+        this.subscriptions[subId].service.close();
         delete this.subscriptions[subId];
       } catch (err) {
         console.error(`Error cleaning up subscription ${subId}:`, err);
@@ -137,6 +139,35 @@ export class JsonRpcHandler {
   }
 
   /**
+   * Create FabricService for a request
+   */
+  private async createFabricService(
+    identity: any,
+    peer: any
+  ): Promise<FabricService> {
+    if (
+      !identity?.certificate ||
+      !identity?.mspId ||
+      !peer?.name ||
+      !peer?.endpoint
+    ) {
+      throw new Error("Missing required identity or peer details");
+    }
+
+    const fabricIdentity = {
+      mspId: identity.mspId,
+      credentials: Buffer.from(identity.certificate),
+    };
+    const signer = this.createSigner(identity.certificate);
+
+    return await FabricService.createForUser(fabricIdentity, signer, {
+      name: peer.name,
+      endpoint: peer.endpoint,
+      tlsRootCert: peer.tlsRootCert,
+    });
+  }
+
+  /**
    * Requests a signature via WebSocket
    */
   private async requestSignature(
@@ -145,7 +176,6 @@ export class JsonRpcHandler {
   ): Promise<Uint8Array | null> {
     return new Promise((resolve) => {
       const requestId = generateUniqueId();
-
       const handler = (rawMsg: WebSocket.RawData) => {
         try {
           const reply = JSON.parse(rawMsg.toString());
@@ -181,14 +211,11 @@ export class JsonRpcHandler {
   }
 
   // ===== method handlers ====
-
   private async handleEvaluateTransaction(
     id: string,
     params: any
   ): Promise<void> {
     const { identity, channel, chaincode, fn, args, peer } = params;
-
-    const { name, endpoint, tlsRootCert } = peer || {};
 
     if (
       !this.validateRequiredParams(id, [
@@ -197,30 +224,16 @@ export class JsonRpcHandler {
         channel,
         chaincode,
         fn,
-        name,
-        endpoint,
+        peer?.name,
+        peer?.endpoint,
       ])
     ) {
       return;
     }
 
-    const fabricIdentity = {
-      mspId: identity.mspId,
-      credentials: Buffer.from(identity.certificate),
-    };
-
-    const signer = this.createSigner(identity.certificate);
-
+    let service: FabricService | null = null;
     try {
-      const service = await FabricService.createForUser(
-        fabricIdentity,
-        signer,
-        {
-          name,
-          endpoint,
-          tlsRootCert,
-        }
-      );
+      service = await this.createFabricService(identity, peer);
 
       const chaincodeName =
         typeof chaincode === "string" ? chaincode : chaincode.name;
@@ -236,11 +249,13 @@ export class JsonRpcHandler {
       });
 
       this.sendResponse(id, result);
-
-      service.close();
     } catch (err) {
       console.error("Transaction error:", err);
       this.sendError(id, -32000, "Transaction failed", err);
+    } finally {
+      if (service) {
+        service.close();
+      }
     }
   }
 
@@ -250,8 +265,6 @@ export class JsonRpcHandler {
   ): Promise<void> {
     const { identity, channel, chaincode, fn, args, peer } = params;
 
-    const { name, endpoint, tlsRootCert } = peer || {};
-
     if (
       !this.validateRequiredParams(id, [
         identity?.certificate,
@@ -259,30 +272,16 @@ export class JsonRpcHandler {
         channel,
         chaincode,
         fn,
-        name,
-        endpoint,
+        peer?.name,
+        peer?.endpoint,
       ])
     ) {
       return;
     }
 
-    const fabricIdentity = {
-      mspId: identity.mspId,
-      credentials: Buffer.from(identity.certificate),
-    };
-
-    const signer = this.createSigner(identity.certificate);
-
+    let service: FabricService | null = null;
     try {
-      const service = await FabricService.createForUser(
-        fabricIdentity,
-        signer,
-        {
-          name,
-          endpoint,
-          tlsRootCert,
-        }
-      );
+      service = await this.createFabricService(identity, peer);
 
       const chaincodeName =
         typeof chaincode === "string" ? chaincode : chaincode.name;
@@ -298,18 +297,18 @@ export class JsonRpcHandler {
       });
 
       this.sendResponse(id, result);
-
-      service.close();
     } catch (err) {
       console.error("Transaction submission error:", err);
       this.sendError(id, -32000, "Transaction submission failed", err);
+    } finally {
+      if (service) {
+        service.close();
+      }
     }
   }
 
   private async handleSubmitAsync(id: string, params: any): Promise<void> {
     const { identity, channel, chaincode, fn, args, peer } = params;
-
-    const { name, endpoint, tlsRootCert } = peer || {};
 
     if (
       !this.validateRequiredParams(id, [
@@ -318,30 +317,16 @@ export class JsonRpcHandler {
         channel,
         chaincode,
         fn,
-        name,
-        endpoint,
+        peer?.name,
+        peer?.endpoint,
       ])
     ) {
       return;
     }
 
-    const fabricIdentity = {
-      mspId: identity.mspId,
-      credentials: Buffer.from(identity.certificate),
-    };
-
-    const signer = this.createSigner(identity.certificate);
-
+    let service: FabricService | null = null;
     try {
-      const service = await FabricService.createForUser(
-        fabricIdentity,
-        signer,
-        {
-          name,
-          endpoint,
-          tlsRootCert,
-        }
-      );
+      service = await this.createFabricService(identity, peer);
 
       const chaincodeName =
         typeof chaincode === "string" ? chaincode : chaincode.name;
@@ -360,12 +345,15 @@ export class JsonRpcHandler {
     } catch (err) {
       console.error("Async transaction submission error:", err);
       this.sendError(id, -32000, "Async transaction submission failed", err);
+    } finally {
+      if (service) {
+        service.close();
+      }
     }
   }
 
   async handleSubscribe(id: string, params: any): Promise<void> {
     const { eventType } = params;
-
     if (!this.validateRequiredParams(id, [eventType])) {
       return;
     }
@@ -389,14 +377,11 @@ export class JsonRpcHandler {
   }
 
   // ==== subscriptions handlers ====
-
   private async handleSubscribeChaincodeEvents(
     id: string,
     params: any
   ): Promise<void> {
     const { identity, channel, chaincode, peer } = params;
-
-    const { name, endpoint, tlsRootCert } = peer || {};
 
     if (
       !this.validateRequiredParams(id, [
@@ -404,30 +389,16 @@ export class JsonRpcHandler {
         identity?.mspId,
         channel,
         chaincode,
-        name,
-        endpoint,
+        peer?.name,
+        peer?.endpoint,
       ])
     ) {
       return;
     }
 
-    const fabricIdentity = {
-      mspId: identity.mspId,
-      credentials: Buffer.from(identity.certificate),
-    };
-
-    const signer = this.createSigner(identity.certificate);
-
+    let service: FabricService | null = null;
     try {
-      const service = await FabricService.createForUser(
-        fabricIdentity,
-        signer,
-        {
-          name,
-          endpoint,
-          tlsRootCert,
-        }
-      );
+      service = await this.createFabricService(identity, peer);
 
       const chaincodeName =
         typeof chaincode === "string" ? chaincode : chaincode.name;
@@ -436,6 +407,7 @@ export class JsonRpcHandler {
         channel,
         chaincodeName
       );
+
       const subscriptionId = generateUniqueId();
 
       const eventProcessor = async () => {
@@ -462,17 +434,9 @@ export class JsonRpcHandler {
               },
             },
           });
-          // Clean up on error
-          if (this.subscriptions[subscriptionId]) {
-            this.subscriptions[subscriptionId].closeListener();
-            delete this.subscriptions[subscriptionId];
-          }
         } finally {
-          // Clean up when the iterator is done (e.g., unsubscribed)
-          if (this.subscriptions[subscriptionId]) {
-            this.subscriptions[subscriptionId].closeListener();
-            delete this.subscriptions[subscriptionId];
-          }
+          // Clean up when the iterator is done
+          this.cleanupSubscription(subscriptionId);
         }
       };
 
@@ -481,14 +445,17 @@ export class JsonRpcHandler {
       this.subscriptions[subscriptionId] = {
         closeListener: () => {
           eventsIterator.close();
-          service.close();
         },
+        service: service, // Keep reference for cleanup
       };
 
       this.sendResponse(id, subscriptionId);
     } catch (err) {
       console.error("Subscription error:", err);
       this.sendError(id, -32000, "Subscription failed", err);
+      if (service) {
+        service.close();
+      }
     }
   }
 
@@ -498,42 +465,28 @@ export class JsonRpcHandler {
   ): Promise<void> {
     const { identity, channel, startBlock, peer } = params;
 
-    const { name, endpoint, tlsRootCert } = peer || {};
-
     if (
       !this.validateRequiredParams(id, [
         identity?.certificate,
         identity?.mspId,
         channel,
-        name,
-        endpoint,
+        peer?.name,
+        peer?.endpoint,
       ])
     ) {
       return;
     }
 
-    const fabricIdentity = {
-      mspId: identity.mspId,
-      credentials: Buffer.from(identity.certificate),
-    };
-
-    const signer = this.createSigner(identity.certificate);
-
+    let service: FabricService | null = null;
     try {
-      const service = await FabricService.createForUser(
-        fabricIdentity,
-        signer,
-        {
-          name,
-          endpoint,
-          tlsRootCert,
-        }
-      );
+      service = await this.createFabricService(identity, peer);
+
       const options = startBlock ? { startBlock: BigInt(startBlock) } : {};
       const eventsIterator = await service.subscribeToBlockEvents(
         channel,
         options
       );
+
       const subscriptionId = generateUniqueId();
 
       const eventProcessor = async () => {
@@ -541,7 +494,6 @@ export class JsonRpcHandler {
           for await (const block of eventsIterator) {
             const blockAsObject = block.toObject();
             const encodedBlock = encodeUint8ArraysToBase64(blockAsObject);
-
             this.sendNotification("fabric_subscription", {
               subscription: subscriptionId,
               result: {
@@ -559,17 +511,9 @@ export class JsonRpcHandler {
               },
             },
           });
-          // Clean up on error
-          if (this.subscriptions[subscriptionId]) {
-            this.subscriptions[subscriptionId].closeListener();
-            delete this.subscriptions[subscriptionId];
-          }
         } finally {
-          // Clean up when the iterator is done (e.g., unsubscribed)
-          if (this.subscriptions[subscriptionId]) {
-            this.subscriptions[subscriptionId].closeListener();
-            delete this.subscriptions[subscriptionId];
-          }
+          // Clean up when the iterator is done
+          this.cleanupSubscription(subscriptionId);
         }
       };
 
@@ -578,14 +522,17 @@ export class JsonRpcHandler {
       this.subscriptions[subscriptionId] = {
         closeListener: () => {
           eventsIterator.close();
-          service.close();
         },
+        service: service, // Keep reference for cleanup
       };
 
       this.sendResponse(id, subscriptionId);
     } catch (err) {
       console.error("Block subscription error:", err);
       this.sendError(id, -32000, "Block subscription failed", err);
+      if (service) {
+        service.close();
+      }
     }
   }
 
@@ -593,6 +540,7 @@ export class JsonRpcHandler {
     if (this.subscriptions[subscriptionId]) {
       try {
         this.subscriptions[subscriptionId].closeListener();
+        this.subscriptions[subscriptionId].service.close();
         delete this.subscriptions[subscriptionId];
       } catch (err) {
         console.error(`Error cleaning up subscription ${subscriptionId}:`, err);
@@ -601,10 +549,8 @@ export class JsonRpcHandler {
   }
 
   // === other method handlers ====
-
   private async handleUnsubscribe(id: string, params: any): Promise<void> {
     const { subscriptionId } = params;
-
     if (!this.validateRequiredParams(id, [subscriptionId])) {
       return;
     }
@@ -612,6 +558,7 @@ export class JsonRpcHandler {
     if (this.subscriptions[subscriptionId]) {
       try {
         this.subscriptions[subscriptionId].closeListener();
+        this.subscriptions[subscriptionId].service.close();
         delete this.subscriptions[subscriptionId];
         this.sendResponse(id, true);
       } catch (err) {
